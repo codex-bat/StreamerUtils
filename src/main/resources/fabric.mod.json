@@ -1,0 +1,28 @@
+{
+	"schemaVersion": 1,
+	"id": "streamerutils",
+	"version": "${version}",
+	"name": "StreamerUtils",
+	"description": "A server-side mod to enhance streamer experience.",
+	"authors": [
+		"Codex.bat"
+	],
+	"contact": {
+		"homepage": "https://codexbat.dev/",
+		"sources": "https://github.com/codex-bat/Fabric-StreamerUtils",
+		"issues": "https://github.com/codex-bat/Fabric-StreamerUtils/issues"
+	},
+	"license": "GPL-3.0-or-later",
+	"environment": "server",
+	"entrypoints": {
+		"main": [
+			"dev.codexbat.streamerutils.StreamerUtils"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.2",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

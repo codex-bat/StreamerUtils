@@ -1,0 +1,56 @@
+plugins {
+	id 'fabric-loom' version "${loom_version}"
+	id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+repositories {
+	mavenCentral()
+	maven { url "https://maven.awakenedredstone.com" } // for twitch4j-fabric
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Twitch4J Fabric library
+	modImplementation "com.github.twitch4j:twitch4j-fabric:${project.twitch4j_version}"
+	include "com.github.twitch4j:twitch4j-fabric:${project.twitch4j_version}"
+
+	// Missing transitive dependencies (add these)
+	include "commons-logging:commons-logging:1.2"
+	// You may also need these, depending on what Twitch4J features you use:
+	// TY FOR THAT TUTORIAL. WHAT HELLO HOW WOULD I HAVE FIGURED ALL OF THIS OUT OTHERWISE
+	// include "org.apache.httpcomponents:httpclient:4.5.13"
+	// include "org.apache.httpcomponents:httpcore:4.4.13"
+	// include "io.github.openfeign:feign-core:12.4"
+}
+
+processResources {
+	inputs.property "version", project.version
+	filesMatching("fabric.mod.json") {
+		expand "version": inputs.properties.version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+	from("LICENSE") { rename { "${it}_${project.name}" } }
+	from("NOTICE.txt")
+	from("licenses") {
+		into "licenses"
+	}
+}

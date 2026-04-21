@@ -1,0 +1,15 @@
+StreamerUtils – Third‑Party Notices
+
+This project includes software from the following sources:
+
+1. Twitch4J-fabric
+   - License: MIT
+   - Copyright (c) 2022 Philipp Heuer, Awakened Redstone
+   - Full license text: licenses/LICENSE-MIT.txt
+
+2. Apache Commons Logging
+   - License: Apache License 2.0
+   - Copyright (c) The Apache Software Foundation
+   - Full license text: licenses/LICENSE-APACHE.txt
+
+All other code is Copyright (C) 2026 Codex.bat and licensed under GPL-3.0-or-later.
