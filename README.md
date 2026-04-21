@@ -60,7 +60,7 @@ Full documentation is available in the [GitHub Wiki](https://github.com/codex-ba
 [![Modrinth](https://img.shields.io/badge/Download-Modrinth-1bd96a?style=for-the-badge&logo=modrinth)](https://modrinth.com/mod/streamerutils)
 [![GitHub](https://img.shields.io/badge/Download-GitHub-lightgrey?style=for-the-badge&logo=github)](https://github.com/codex-bat/StreamerUtils)
 
-*Companion resource pack (recommended):* [Download here](https://assets.punkord.com/StreamerUtils.zip)
+*Companion resource pack (recommended):* [Download here](https://assets.punkord.com/StreamerUtils_Release.zip)
 
 ---
 
