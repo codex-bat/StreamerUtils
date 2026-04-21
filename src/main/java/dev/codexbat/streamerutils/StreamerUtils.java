@@ -107,7 +107,8 @@ public class StreamerUtils implements ModInitializer {
 						.styled(style -> style.withColor(Formatting.GREEN)
 								.withUnderline(true)
 								.withClickEvent(new ClickEvent.OpenUrl(docsURL))
-								.withHoverEvent(new HoverEvent.ShowText(Text.literal("Open documentation")))));
+								.withHoverEvent(new HoverEvent.ShowText(Text.literal("Open documentation")))))
+				.append(Text.literal("\n"));
 
 		Text modrinthButton = Text.literal("[Modrinth]")
 				.styled(style -> style.withColor(Formatting.GREEN)

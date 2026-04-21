@@ -6,6 +6,13 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 
+base {
+	archivesName = project.archives_base_name
+}
+
+def exportVersion = "${project.mod_version}-${project.minecraft_version}"
+def exportBaseName = "${project.archives_base_name}-${exportVersion}"
+
 repositories {
 	mavenCentral()
 	maven { url "https://maven.awakenedredstone.com" } // for twitch4j-fabric
@@ -47,10 +54,13 @@ java {
 	targetCompatibility = JavaVersion.VERSION_21
 }
 
-jar {
+tasks.named("jar") {
 	from("LICENSE") { rename { "${it}_${project.name}" } }
 	from("NOTICE.txt")
-	from("licenses") {
-		into "licenses"
-	}
+	from("licenses") { into "licenses" }
+	archiveFileName.set("${exportBaseName}-dev.jar")
+}
+
+tasks.named("remapJar") {
+	archiveFileName.set("${exportBaseName}.jar")
 }
