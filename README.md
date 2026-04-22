@@ -67,7 +67,7 @@ Full documentation is available in the [GitHub Wiki](https://github.com/codex-ba
 ## 🔧 Building from Source
 
 ```bash
-git clone https://github.com/Codex-bat/StreamerUtils.git
+git clone https://github.com/codex-bat/StreamerUtils.git
 cd streamerutils
 ./gradlew build
 ```
