@@ -68,7 +68,7 @@ Full documentation is available in the [GitHub Wiki](https://github.com/codex-ba
 
 ```bash
 git clone https://github.com/codex-bat/StreamerUtils.git
-cd streamerutils
+cd StreamerUtils
 ./gradlew build
 ```
 The compiled JAR will be in build/libs/.
