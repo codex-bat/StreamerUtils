@@ -80,7 +80,7 @@ The compiled JAR will be in build/libs/.
 - More platform icons (TikTok (nah, I changed my mind abt TikTok, fuh that --- I somehow managed to forget about Ireland's lawsuit against them and allat fiasco. definitely not a company I want to associate with --- wait this is a mod, why am I making it political...? scratch that, TikTok was never written in this file), Discord, etc.)
 - Twitch chat relay to Minecraft (optional)
 - Web dashboard for configuration
-- Compatibility with Minecraft 1.21+
+- Compatibility with Minecraft 1.21+ (like, pre-1.21.11, but idk yet)
 
 ---
 
