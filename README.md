@@ -1,6 +1,6 @@
 # StreamerUtils
 
-![StreamerUtils logo](https://cdn.modrinth.com/data/placeholder.png)
+![StreamerUtils logo](https://cdn.modrinth.com/data/cached_images/529895d205d8a771bf9c9ca4e6658dfe6da6b0e1.png)
 
 **StreamerUtils** is a server‑side Fabric mod that enhances Minecraft chat for streamers and their communities. It adds **custom nameplate icons, coloured usernames, Twitch integration, follow alerts, sound effects, and some more** – all fully configurable per player.
 
@@ -24,9 +24,9 @@
 
 1. **Install Fabric Loader** (version 0.14.0 or later) – [instructions here](https://fabricmc.net/use/)
 2. **Download the mod JAR** from [Modrinth](https://modrinth.com/mod/streamerutils) or [GitHub](https://github.com/codex-bat/StreamerUtils)
-3. Place the JAR in your server’s `mods` folder (client‑side installation is optional – only needed if you want to see the custom icons)
+3. Place the JAR in your server’s `mods` folder (server-side only, as stated above lol)
 4. Start the server – the mod will generate default configs
-5. (Optional) Install the **companion resource pack** (link below) to see all custom icons
+5. Install the **companion resource pack** (link below) to see all custom icons
 
 ---
 
@@ -67,7 +67,7 @@ Full documentation is available in the [GitHub Wiki](https://github.com/codex-ba
 ## 🔧 Building from Source
 
 ```bash
-git clone https://github.com/Codexbat/streamerutils.git
+git clone https://github.com/Codex-bat/StreamerUtils.git
 cd streamerutils
 ./gradlew build
 ```
@@ -77,7 +77,7 @@ The compiled JAR will be in build/libs/.
 
 ## 🧪 Planned Features
 
-- More platform icons (TikTok, Discord, etc.)
+- More platform icons (TikTok (nah, I changed my mind abt TikTok, fuh that --- I somehow managed to forget about Ireland's lawsuit against them and allat fiasco. definitely not a company I want to associate with --- wait this is a mod, why am I making it political...? scratch that, TikTok was never written in this file), Discord, etc.)
 - Twitch chat relay to Minecraft (optional)
 - Web dashboard for configuration
 - Compatibility with Minecraft 1.21+
