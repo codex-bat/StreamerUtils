@@ -48,7 +48,7 @@ Use `/su help` in‑game for a full list. Main commands:
 
 ## 📚 Documentation & Help
 
-Full documentation is available in the [GitHub Wiki](https://github.com/codex-bat/StreamerUtils/wiki) or the `docs/` folder in the repository. It includes:
+Full documentation is available in the [GitHub Wiki](https://github.com/codex-bat/StreamerUtils/wiki). It includes:
 
 - Detailed command reference
 - Twitch OAuth token generation guide
@@ -67,8 +67,8 @@ Full documentation is available in the [GitHub Wiki](https://github.com/codex-ba
 ## 🔧 Building from Source
 
 ```bash
-git clone https://github.com/Codex-bat/StreamerUtils.git
-cd streamerutils
+git clone https://github.com/codex-bat/StreamerUtils.git
+cd StreamerUtils
 ./gradlew build
 ```
 The compiled JAR will be in build/libs/.
