@@ -22,7 +22,7 @@ import java.util.Base64;
 final class DataSegmenter {
 
     // this gets swapped out before building the real jar
-    private static final String VERSION_TAG = "v1.2.3_build_20250321"; // ... like seriously...
+    private static final String VERSION_TAG = "v2.0.0-987654321_-4109876543"; // ... like seriously...
     private static final byte[] INTERNAL_SALT;
 
     static {

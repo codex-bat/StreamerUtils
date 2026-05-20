@@ -35,7 +35,7 @@ public final class IconGlyphs {
     public static final String MOD_CYAN = "\uE011";       // cyan mod logo (transparent)
     public static final String MOD_GREY = "\uE012";       // grey mod logo (transparent)
     public static final String MOD_BLUE = "\uE013";       // blue mod logo (transparent)
-    public static final String MOD_DARK_GREY = "\uE014";       // blue mod logo (transparent)
+    public static final String MOD_DARK_GREY = "\uE014";  // blue mod logo (transparent)
     public static final String MOD_CYAN_BG = "\uE019";    // cyan mod logo + background
     public static final String MOD_GREY_DEPTH = "\uE01A"; // grey mod logo + depth
     public static final String MOD_BLUE_DEPTH = "\uE01B"; // grey mod logo + depth
@@ -68,6 +68,11 @@ public final class IconGlyphs {
 
     public static Text styledIcon(PlayerSettings settings, boolean isChat) {
         return build(settings, resolveFont(settings, isChat));
+    }
+
+    public static Text styledIconForViewer(PlayerSettings senderSettings, boolean useChatFont) {
+        StyleSpriteSource font = useChatFont ? CHAT_FONT : TAB_FONT;
+        return build(senderSettings, font);
     }
 
     private static Text build(PlayerSettings settings, StyleSpriteSource font) {

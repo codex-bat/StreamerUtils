@@ -12,6 +12,8 @@ public final class MessageStyles {
     public static final Formatting ARROW_COLOR = Formatting.GRAY;
     // Default neutral text
     public static final Formatting DEFAULT_COLOR = Formatting.GRAY;
+    // Default neutral text
+    public static final Formatting CHAT_COLOR = Formatting.WHITE;
     // Header for reset sections
     public static final Formatting HEADER_COLOR = Formatting.DARK_AQUA;
     // Undo button

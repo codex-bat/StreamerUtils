@@ -4,15 +4,16 @@
 package dev.codexbat.streamerutils.command;
 
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import dev.codexbat.streamerutils.*;
-import java.security.SecureRandom;
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
+
+import dev.codexbat.streamerutils.emoji.core.EmojiDefinition;
+import dev.codexbat.streamerutils.emoji.EmojiFont;
+import dev.codexbat.streamerutils.emoji.core.EmojiRegistry;
 import dev.codexbat.streamerutils.messaging.MessageSender;
 import dev.codexbat.streamerutils.messaging.MessageStyles;
 import dev.codexbat.streamerutils.twitch.TwitchConfig;
@@ -26,16 +27,10 @@ import net.minecraft.text.*;
 import net.minecraft.util.Formatting;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.HoverEvent;
-import net.minecraft.command.permission.PermissionPredicate;
-import net.minecraft.util.Identifier;
-import org.jspecify.annotations.Nullable;
 
-import java.security.PermissionCollection;
-import java.security.Permissions;
 import java.util.*;
 import java.util.function.BiFunction;
 
-import static dev.codexbat.streamerutils.IconGlyphs.CHAT_FONT;
 import static dev.codexbat.streamerutils.IconGlyphs.DEFAULT_FONT;
 
 public final class StreamerUtilsCommands {
@@ -245,6 +240,12 @@ public final class StreamerUtilsCommands {
                                 .executes(context -> showFollowAlertStatus(context.getSource()))
                         )
                 )
+                .then(CommandManager.literal("emoji")
+                        .then(CommandManager.literal("list")
+                                .executes(ctx -> listEmojis(ctx.getSource(), 1))
+                                .then(CommandManager.argument("page", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> listEmojis(ctx.getSource(),
+                                                IntegerArgumentType.getInteger(ctx, "page"))))))
                 .then(CommandManager.literal("bracket")
                         .requires(CommandManager.requirePermissionLevel(CommandManager.GAMEMASTERS_CHECK))
                         .then(CommandManager.literal("set")
@@ -279,6 +280,7 @@ public final class StreamerUtilsCommands {
                 new CommandHelp("/su icon tinytakeover", "Toggle between separate and shared chat icons"),
                 new CommandHelp("/su icon chaticons <true/false>", "Set chat icon font mode directly"),
                 new CommandHelp("/su color list", "List all colors"),
+                new CommandHelp("/su emoji list", "List all emojis"),
                 new CommandHelp("/su color <color>", "Set your name color (name or #RRGGBB)"),
                 new CommandHelp("/su stream start/stop", "Toggle streamer live status"),
                 new CommandHelp("/su stream info", "Show stream stats (your own or the active streamer)"),
@@ -521,6 +523,92 @@ public final class StreamerUtilsCommands {
         }
 
         MessageSender.sendFeedback(source, message);
+        return 1;
+    }
+
+    private static int listEmojis(ServerCommandSource source, int page) throws CommandSyntaxException {
+        var player = source.getPlayerOrThrow();
+        Collection<EmojiDefinition> all = EmojiRegistry.all();
+        if (all.isEmpty()) {
+            MessageSender.sendFeedback(source,
+                    Text.literal("No emojis registered.").formatted(Formatting.RED));
+            return 1;
+        }
+
+        int pageSize = 15;
+        int total = all.size();
+        int maxPage = (total + pageSize - 1) / pageSize;
+        if (page < 1) page = 1;
+        if (page > maxPage) page = maxPage;
+
+        List<EmojiDefinition> list = new ArrayList<>(all);
+        int start = (page - 1) * pageSize;
+        int end = Math.min(start + pageSize, total);
+
+        MutableText header = Text.literal("=== Emojis (")
+                .append(Text.literal(String.valueOf(start + 1)))
+                .append(Text.literal("-"))
+                .append(Text.literal(String.valueOf(end)))
+                .append(Text.literal(" of "))
+                .append(Text.literal(String.valueOf(total)))
+                .append(Text.literal(") ==="))
+                .styled(s -> s.withColor(Formatting.GOLD).withBold(true));
+
+        MutableText content = Text.empty();
+        for (int i = start; i < end; i++) {
+            EmojiDefinition emoji = list.get(i);
+            String name = emoji.name();
+            String glyph = emoji.glyph();
+
+            // Emoji glyph with custom font
+            MutableText glyphPart = Text.literal(glyph)
+                    .styled(s -> s.withFont(EmojiFont.EMOJI_FONT).withColor(Formatting.WHITE));
+
+            // Spacing (uses default font)
+            MutableText spacing = Text.literal(" ").styled(s -> s.withFont(DEFAULT_FONT));
+
+            // Emoji name with click-to-suggest and hover
+            MutableText namePart = Text.literal(name)
+                    .styled(s -> s.withColor(Formatting.AQUA)
+                            .withClickEvent(new ClickEvent.SuggestCommand(":" + name + ":"))
+                            .withHoverEvent(new HoverEvent.ShowText(
+                                    Text.literal("Click to suggest :" + name + ":"))));
+
+            MutableText line = Text.literal("• ")
+                    .append(glyphPart)
+                    .append(spacing)
+                    .append(namePart);
+            content.append(line).append(Text.literal("\n"));
+        }
+
+        // Pagination buttons
+        MutableText nav = Text.empty();
+        if (page > 1) {
+            int finalPage = page;
+            nav.append(Text.literal("◀ Previous")
+                    .styled(s -> s.withColor(Formatting.GREEN)
+                            .withClickEvent(new ClickEvent.RunCommand("/su emoji list " + (finalPage - 1)))
+                            .withHoverEvent(new HoverEvent.ShowText(Text.literal("Go to page " + (finalPage - 1))))));
+        } else {
+            nav.append(Text.literal("◀ Previous").styled(s -> s.withColor(Formatting.DARK_GRAY)));
+        }
+        nav.append(Text.literal("   "));
+        if (page < maxPage) {
+            int finalPage1 = page;
+            nav.append(Text.literal("Next ▶")
+                    .styled(s -> s.withColor(Formatting.GREEN)
+                            .withClickEvent(new ClickEvent.RunCommand("/su emoji list " + (finalPage1 + 1)))
+                            .withHoverEvent(new HoverEvent.ShowText(Text.literal("Go to page " + (finalPage1 + 1))))));
+        } else {
+            nav.append(Text.literal("Next ▶").styled(s -> s.withColor(Formatting.DARK_GRAY)));
+        }
+
+        MutableText fullMessage = header.append(Text.literal("\n\n"))
+                .append(content)
+                .append(Text.literal("\n"))
+                .append(nav);
+
+        MessageSender.sendFeedback(source, fullMessage);
         return 1;
     }
 

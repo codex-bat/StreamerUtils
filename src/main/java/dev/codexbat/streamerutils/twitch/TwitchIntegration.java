@@ -15,7 +15,9 @@ import com.github.twitch4j.helix.domain.Stream;
 import dev.codexbat.streamerutils.NameplateManager;
 import dev.codexbat.streamerutils.PlayerSettings;
 import dev.codexbat.streamerutils.SettingsStore;
+import dev.codexbat.streamerutils.twitch.SoundAlertManager;
 import dev.codexbat.streamerutils.StreamerUtils;
+import dev.codexbat.streamerutils.network.ConfigPacketServer;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import net.minecraft.component.DataComponentTypes;
@@ -42,10 +44,8 @@ import java.util.concurrent.TimeUnit;
 public class TwitchIntegration {
     static MinecraftServer server;
 
-    // Per‑player clients and configs
     private static final Map<UUID, PlayerTwitchContext> playerContexts = new ConcurrentHashMap<>();
 
-    // Global fallback client (legacy / server‑wide)
     private static TwitchClient globalClient;
     private static TwitchConfig globalConfig;
     private static String globalChannelId;
@@ -56,9 +56,6 @@ public class TwitchIntegration {
     private static ScheduledExecutorService globalScheduler;
     private static final long OFFLINE_GRACE_PERIOD_MS = TimeUnit.MINUTES.toMillis(15);
 
-    // ------------------------------------------------------------------------
-    // Player context holder
-    // ------------------------------------------------------------------------
     private static class PlayerTwitchContext {
         final TwitchClient client;
         final TwitchConfig config;
@@ -78,9 +75,6 @@ public class TwitchIntegration {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Initialization (called on server start)
-    // ------------------------------------------------------------------------
     public static void init(MinecraftServer minecraftServer) {
         server = minecraftServer;
         globalConfig = TwitchConfig.loadGlobal();
@@ -93,7 +87,8 @@ public class TwitchIntegration {
     private static void startGlobalClient() {
         try {
             globalClient = buildClient(globalConfig);
-            var users = globalClient.getHelix().getUsers(null, null, List.of(globalConfig.twitchChannelName)).execute().getUsers();
+            var users = globalClient.getHelix().getUsers(null, null, List.of(globalConfig.twitchChannelName))
+                    .execute().getUsers();
             if (users.isEmpty()) {
                 StreamerUtils.LOGGER.error("Global Twitch channel not found: {}", globalConfig.twitchChannelName);
                 globalConfig.enabled = false;
@@ -102,7 +97,7 @@ public class TwitchIntegration {
             globalChannelId = users.get(0).getId();
             globalClient.getChat().joinChannel(globalConfig.twitchChannelName);
 
-            registerEvents(globalClient, globalConfig, globalChannelId, null); // null uuid = global
+            registerEvents(globalClient, globalConfig, globalChannelId, null);
             startSchedulerForContext(null);
 
             StreamerUtils.LOGGER.info("Global Twitch client started for channel: {}", globalConfig.twitchChannelName);
@@ -112,24 +107,28 @@ public class TwitchIntegration {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Per‑player client management
-    // ------------------------------------------------------------------------
     public static void reloadForPlayer(UUID uuid, TwitchConfig config) {
-        unloadForPlayer(uuid); // Clean up any existing client
+        if (ConfigPacketServer.isClientManaged(uuid)) {
+            StreamerUtils.LOGGER.info("Skipping legacy Twitch startup for {} because client-side Twitch is active.", uuid);
+            return;
+        }
+
+        unloadForPlayer(uuid);
 
         if (!config.enabled || config.oauthToken.isEmpty()) {
-            StreamerUtils.LOGGER.info("Player {} Twitch config disabled or empty, using global fallback.", uuid);
+            StreamerUtils.LOGGER.info("Player {} Twitch config disabled or empty.", uuid);
             return;
         }
 
         try {
             TwitchClient client = buildClient(config);
-            var users = client.getHelix().getUsers(null, null, List.of(config.twitchChannelName)).execute().getUsers();
+            var users = client.getHelix().getUsers(null, null, List.of(config.twitchChannelName))
+                    .execute().getUsers();
             if (users.isEmpty()) {
                 StreamerUtils.LOGGER.error("Player {} Twitch channel not found: {}", uuid, config.twitchChannelName);
                 return;
             }
+
             String channelId = users.get(0).getId();
             client.getChat().joinChannel(config.twitchChannelName);
 
@@ -139,7 +138,7 @@ public class TwitchIntegration {
             registerEvents(client, config, channelId, uuid);
             startSchedulerForContext(uuid);
 
-            StreamerUtils.LOGGER.info("Player {} Twitch client started for channel: {}", uuid, config.twitchChannelName);
+            StreamerUtils.LOGGER.info("Player {} legacy Twitch client started for channel: {}", uuid, config.twitchChannelName);
         } catch (Exception e) {
             StreamerUtils.LOGGER.error("Failed to start Twitch client for player {}", uuid, e);
         }
@@ -148,15 +147,20 @@ public class TwitchIntegration {
     public static void unloadForPlayer(UUID uuid) {
         PlayerTwitchContext ctx = playerContexts.remove(uuid);
         if (ctx != null) {
-            if (ctx.scheduler != null) ctx.scheduler.shutdownNow();
+            if (ctx.scheduler != null) {
+                ctx.scheduler.shutdownNow();
+            }
             ctx.client.close();
             StreamerUtils.LOGGER.info("Player {} Twitch client unloaded.", uuid);
         }
     }
 
     public static boolean ensureClientForPlayer(UUID uuid, TwitchConfig config) {
+        if (ConfigPacketServer.isClientManaged(uuid)) {
+            return false;
+        }
         if (playerContexts.containsKey(uuid)) {
-            return true; // already running
+            return true;
         }
         try {
             reloadForPlayer(uuid, config);
@@ -178,54 +182,34 @@ public class TwitchIntegration {
                 .build();
     }
 
-    // ------------------------------------------------------------------------
-    // Event registration (works for both global and per‑player)
-    // ------------------------------------------------------------------------
     @SuppressWarnings("deprecation")
     private static void registerEvents(TwitchClient client, TwitchConfig cfg, String channelId, UUID playerUuid) {
-        // Chat message handling
-        client.getEventManager().onEvent(ChannelMessageEvent.class, event -> {
-            handleChatMessage(event, playerUuid);
-        });
+        client.getEventManager().onEvent(ChannelMessageEvent.class, event -> handleChatMessage(event, playerUuid));
 
-        // Follow events (keep deprecated method as requested)
         String botUserId = client.getChat().getChannelNameToChannelId().get(cfg.botUsername);
         if (botUserId == null) {
-            // Try to fetch via Helix
             var botUsers = client.getHelix().getUsers(null, null, List.of(cfg.botUsername)).execute().getUsers();
-            if (!botUsers.isEmpty()) botUserId = botUsers.get(0).getId();
+            if (!botUsers.isEmpty()) {
+                botUserId = botUsers.get(0).getId();
+            }
         }
+
         if (botUserId != null) {
             ChannelFollowV2Condition condition = ChannelFollowV2Condition.builder()
                     .broadcasterUserId(channelId)
                     .moderatorUserId(botUserId)
                     .build();
             client.getEventSocket().register(SubscriptionTypes.CHANNEL_FOLLOW_V2, condition);
-            // pls, i know it's a fatal error, but I literally couldn't find a way around it. I'll just never ever update twitchj4 ig :')
         } else {
             StreamerUtils.LOGGER.warn("Could not determine bot user ID for follow events");
         }
 
-        client.getEventManager().onEvent(ChannelFollowEvent.class, event -> {
-            handleFollowEvent(event, playerUuid);
-        });
-
-        // go‑live event
+        client.getEventManager().onEvent(ChannelFollowEvent.class, event -> handleFollowEvent(event, playerUuid));
         client.getEventManager().onEvent(ChannelGoLiveEvent.class, event -> {
             if (event.getChannel().getId().equals(channelId)) {
                 setStreamStartTime(playerUuid, System.currentTimeMillis());
             }
         });
-
-        // Debug Subscription events
-        client.getEventManager().onEvent(
-                com.github.twitch4j.eventsub.socket.events.EventSocketSubscriptionFailureEvent.class,
-                e -> System.out.println("SUB FAILED: " + e)
-        );
-        client.getEventManager().onEvent(
-                com.github.twitch4j.eventsub.socket.events.EventSocketSubscriptionSuccessEvent.class,
-                e -> System.out.println("SUB OK: " + e)
-        );
     }
 
     private static void startSchedulerForContext(UUID playerUuid) {
@@ -239,13 +223,12 @@ public class TwitchIntegration {
             globalScheduler = scheduler;
         } else {
             PlayerTwitchContext ctx = playerContexts.get(playerUuid);
-            if (ctx != null) ctx.scheduler = scheduler;
+            if (ctx != null) {
+                ctx.scheduler = scheduler;
+            }
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Event Handlers
-    // ------------------------------------------------------------------------
     private static void handleChatMessage(ChannelMessageEvent event, UUID playerUuid) {
         String message = event.getMessage();
         String userDisplay = event.getUser().getName();
@@ -310,9 +293,6 @@ public class TwitchIntegration {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Scheduled tasks
-    // ------------------------------------------------------------------------
     private static void updateStreamInfo(UUID playerUuid) {
         TwitchClient client = getClient(playerUuid);
         String channelId = getChannelId(playerUuid);
@@ -325,26 +305,29 @@ public class TwitchIntegration {
 
             boolean currentlyOnline = !streams.isEmpty();
             long now = System.currentTimeMillis();
-            PlayerTwitchContext ctx = playerContexts.get(playerUuid);
-            if (ctx == null) return;
+
+            PlayerTwitchContext ctx = playerUuid != null ? playerContexts.get(playerUuid) : null;
+            if (playerUuid != null && ctx == null) {
+                return;
+            }
 
             if (currentlyOnline) {
                 Stream stream = streams.get(0);
                 setStreamStartTime(playerUuid, stream.getStartedAtInstant().toEpochMilli());
-                ctx.wasOnline = true;
-                ctx.offlineSince = 0;
+                if (ctx != null) {
+                    ctx.wasOnline = true;
+                    ctx.offlineSince = 0;
+                }
             } else {
                 setStreamStartTime(playerUuid, 0);
-                if (ctx.wasOnline) {
-                    // Just went offline – record the time
+                if (ctx != null && ctx.wasOnline) {
                     ctx.offlineSince = now;
                     ctx.wasOnline = false;
                 }
 
-                // check if we should auto‑disable streamer mode
-                if (ctx.offlineSince > 0 && (now - ctx.offlineSince) > OFFLINE_GRACE_PERIOD_MS) {
+                if (ctx != null && ctx.offlineSince > 0 && (now - ctx.offlineSince) > OFFLINE_GRACE_PERIOD_MS) {
                     autoDisableStreamerMode(playerUuid);
-                    ctx.offlineSince = 0; // prevent repeated attempts
+                    ctx.offlineSince = 0;
                 }
             }
         } catch (Exception e) {
@@ -353,21 +336,18 @@ public class TwitchIntegration {
     }
 
     private static void autoDisableStreamerMode(UUID playerUuid) {
-        // Only act if the player is still marked as live
         PlayerSettings settings = SettingsStore.get(playerUuid);
         if (!settings.streamerLive()) return;
 
-        // Update settings and refresh nameplate
         SettingsStore.set(playerUuid, settings.withStreamerLive(false));
         ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerUuid);
         if (player != null) {
             NameplateManager.apply(server, player);
-            // Optionally notify the player
             player.sendMessage(Text.literal("Your stream appears to be offline. Stream Mode has been turned off.")
                     .formatted(Formatting.GRAY), false);
         }
 
-        StreamerUtils.LOGGER.info("Auto‑disabled streamer mode for player {} (Twitch offline for >15 min)", playerUuid);
+        StreamerUtils.LOGGER.info("Auto-disabled streamer mode for player {} (Twitch offline for >15 min)", playerUuid);
     }
 
     private static void checkNewFollowers(UUID playerUuid) {
@@ -376,19 +356,16 @@ public class TwitchIntegration {
         if (client == null || channelId == null) return;
 
         try {
-            var follows = client.getHelix().getChannelFollowers(
-                    null, channelId, channelId, null, "1"
-            ).execute();
+            var follows = client.getHelix().getChannelFollowers(null, channelId, channelId, null, "1").execute();
             var result = follows.getFollows();
+
             if (!result.isEmpty()) {
                 String newest = result.get(0).getUserName();
                 String lastKnown = getLastKnownFollower(playerUuid);
                 if (!newest.equals(lastKnown)) {
                     setLastKnownFollower(playerUuid, newest);
                     setLastFollower(playerUuid, newest);
-                    // Pass the broadcaster UUID (playerUuid) as third argument
                     SoundAlertManager.playFollowSound(server, newest, playerUuid);
-                    // No broadcast here – SoundAlertManager handles it per player settings
                 }
             }
         } catch (Exception e) {
@@ -396,9 +373,6 @@ public class TwitchIntegration {
         }
     }
 
-    // ------------------------------------------------------------------------
-    // Helper methods to Get the correct context
-    // ------------------------------------------------------------------------
     private static TwitchClient getClient(UUID playerUuid) {
         if (playerUuid != null) {
             PlayerTwitchContext ctx = playerContexts.get(playerUuid);
@@ -440,37 +414,12 @@ public class TwitchIntegration {
         }
     }
 
-    private static long getStreamStartTime(UUID playerUuid) {
-        if (playerUuid != null) {
-            PlayerTwitchContext ctx = playerContexts.get(playerUuid);
-            if (ctx != null) return ctx.streamStartTime;
-        }
-        return globalStreamStartTime;
-    }
-
     private static void setLastFollower(UUID playerUuid, String name) {
         if (playerUuid != null) {
             PlayerTwitchContext ctx = playerContexts.get(playerUuid);
             if (ctx != null) ctx.lastFollower = name;
         } else {
             globalLastFollower = name;
-        }
-    }
-
-    private static String getLastFollower(UUID playerUuid) {
-        if (playerUuid != null) {
-            PlayerTwitchContext ctx = playerContexts.get(playerUuid);
-            if (ctx != null) return ctx.lastFollower;
-        }
-        return globalLastFollower;
-    }
-
-    private static void setLastKnownFollower(UUID playerUuid, String name) {
-        if (playerUuid != null) {
-            PlayerTwitchContext ctx = playerContexts.get(playerUuid);
-            if (ctx != null) ctx.lastKnownFollower = name;
-        } else {
-            globalLastKnownFollower = name;
         }
     }
 
@@ -482,9 +431,15 @@ public class TwitchIntegration {
         return globalLastKnownFollower;
     }
 
-    // ------------------------------------------------------------------------
-    // Find the streamer player
-    // ------------------------------------------------------------------------
+    private static void setLastKnownFollower(UUID playerUuid, String name) {
+        if (playerUuid != null) {
+            PlayerTwitchContext ctx = playerContexts.get(playerUuid);
+            if (ctx != null) ctx.lastKnownFollower = name;
+        } else {
+            globalLastKnownFollower = name;
+        }
+    }
+
     private static ServerPlayerEntity findStreamerPlayer(UUID specificUuid) {
         if (specificUuid != null) {
             ServerPlayerEntity player = server.getPlayerManager().getPlayer(specificUuid);
@@ -492,37 +447,50 @@ public class TwitchIntegration {
                 return player;
             }
         }
-        // Fallback: first player with streamerLive = true
+
         return server.getPlayerManager().getPlayerList().stream()
                 .filter(p -> SettingsStore.get(p.getUuid()).streamerLive())
                 .findFirst()
                 .orElse(null);
     }
 
-    // ------------------------------------------------------------------------
-    // Public API (used by commands)
-    // ------------------------------------------------------------------------
     public static String getStreamInfo() {
-        // Find the active streamer
         ServerPlayerEntity streamerPlayer = server.getPlayerManager().getPlayerList().stream()
                 .filter(p -> SettingsStore.get(p.getUuid()).streamerLive())
                 .findFirst()
                 .orElse(null);
 
-        TwitchConfig cfg = null;
-        TwitchClient client = null;
-        String channelId = null;
-        long streamStart = 0;
-        String lastFollower = "";
+        TwitchConfig cfg;
+        TwitchClient client;
+        String channelId;
+        long streamStart;
+        String lastFollower;
 
         if (streamerPlayer != null) {
             UUID uuid = streamerPlayer.getUuid();
-            cfg = TwitchConfig.getEffectiveConfig(uuid); // personal if valid, else global
+            cfg = TwitchConfig.getEffectiveConfig(uuid);
+
+            if (ConfigPacketServer.isClientManaged(uuid)) {
+                var mirror = ConfigPacketServer.getMirroredState(uuid);
+                if (mirror != null) {
+                    long viewerCount = mirror.viewerCount();
+                    String uptime = mirror.live() && mirror.startedAtEpochMs() > 0
+                            ? formatUptime(System.currentTimeMillis() - mirror.startedAtEpochMs())
+                            : "Offline";
+
+                    String followerInfo = mirror.lastFollower().isEmpty()
+                            ? "No recent followers"
+                            : "Latest: " + mirror.lastFollower();
+
+                    return String.format("Stream: %s | Viewers: %d | Uptime: %s | %s",
+                            cfg.twitchChannelName, viewerCount, uptime, followerInfo);
+                }
+                return "Client Twitch is active, but no mirrored state has arrived yet.";
+            }
 
             if (cfg.enabled) {
                 PlayerTwitchContext ctx = playerContexts.get(uuid);
                 if (ctx == null) {
-                    // Try to start the client now (lazy)
                     StreamerUtils.LOGGER.info("Streamer {} requested info but client not running. Attempting to start.", uuid);
                     ensureClientForPlayer(uuid, cfg);
                     ctx = playerContexts.get(uuid);
@@ -533,14 +501,12 @@ public class TwitchIntegration {
                     streamStart = ctx.streamStartTime;
                     lastFollower = ctx.lastFollower;
                 } else {
-                    // Client failed to start – report clearly
                     return "Twitch client failed to start. Check logs or use /su twitch status.";
                 }
             } else {
                 return "Twitch not configured. Use /su twitch setup.";
             }
         } else {
-            // No active streamer – show global or nothing
             cfg = globalConfig;
             client = globalClient;
             channelId = globalChannelId;
@@ -556,14 +522,14 @@ public class TwitchIntegration {
             String uptime = "Offline";
             if (streamStart > 0) {
                 long duration = System.currentTimeMillis() - streamStart;
-                long hours = duration / 3600000;
-                long minutes = (duration % 3600000) / 60000;
-                uptime = hours + "h " + minutes + "m";
+                uptime = formatUptime(duration);
+
                 List<Stream> streams = client.getHelix().getStreams(
                         null, null, null, null, null, null, List.of(channelId), null
                 ).execute().getStreams();
                 if (!streams.isEmpty()) viewerCount = streams.get(0).getViewerCount();
             }
+
             String followerInfo = lastFollower.isEmpty() ? "No recent followers" : "Latest: " + lastFollower;
             return String.format("Stream: %s | Viewers: %d | Uptime: %s | %s",
                     cfg.twitchChannelName, viewerCount, uptime, followerInfo);
@@ -572,14 +538,22 @@ public class TwitchIntegration {
         }
     }
 
+    private static String formatUptime(long durationMs) {
+        long hours = durationMs / 3_600_000;
+        long minutes = (durationMs % 3_600_000) / 60_000;
+        return hours + "h " + minutes + "m";
+    }
+
     public static void shutdown() {
         playerContexts.values().forEach(ctx -> {
             if (ctx.scheduler != null) ctx.scheduler.shutdownNow();
             ctx.client.close();
         });
         playerContexts.clear();
+
         if (globalScheduler != null) globalScheduler.shutdownNow();
         if (globalClient != null) globalClient.close();
+
         StreamerUtils.LOGGER.info("Twitch integration shut down.");
     }
 }

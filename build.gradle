@@ -26,7 +26,7 @@ dependencies {
 
 	// Twitch4J Fabric library
 	modImplementation "com.github.twitch4j:twitch4j-fabric:${project.twitch4j_version}"
-	include "com.github.twitch4j:twitch4j-fabric:${project.twitch4j_version}"
+	// include "com.github.twitch4j:twitch4j-fabric:${project.twitch4j_version}"
 
 	// Missing transitive dependencies (add these)
 	include "commons-logging:commons-logging:1.2"
