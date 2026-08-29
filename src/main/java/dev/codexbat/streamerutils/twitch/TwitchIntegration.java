@@ -325,7 +325,8 @@ public class TwitchIntegration {
                     ctx.wasOnline = false;
                 }
 
-                if (ctx != null && ctx.offlineSince > 0 && (now - ctx.offlineSince) > OFFLINE_GRACE_PERIOD_MS) {
+                if (ctx != null && ctx.offlineSince > 0 && (now - ctx.offlineSince) > OFFLINE_GRACE_PERIOD_MS
+                        && !ConfigPacketServer.isClientManaged(playerUuid)) {
                     autoDisableStreamerMode(playerUuid);
                     ctx.offlineSince = 0;
                 }

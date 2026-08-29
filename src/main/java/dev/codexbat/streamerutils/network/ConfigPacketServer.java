@@ -43,7 +43,8 @@ public final class ConfigPacketServer {
             long startedAtEpochMs,
             int viewerCount,
             String lastFollower
-    ) {}
+    ) {
+    }
 
     public static void register() {
         // Register all incoming payloads
@@ -107,7 +108,6 @@ public final class ConfigPacketServer {
         ServerPlayNetworking.registerGlobalReceiver(Payloads.StreamStatePayload.ID, (payload, context) -> {
             context.server().execute(() -> {
                 ServerPlayerEntity player = context.player();
-                MinecraftServer server = context.server();
                 UUID uuid = player.getUuid();
 
                 clientModPlayers.add(uuid);
@@ -120,10 +120,10 @@ public final class ConfigPacketServer {
                 if (!settings.twitchSetup()) {
                     SettingsStore.set(uuid, settings.withTwitchSetup(true));
                 }
-                if (settings.streamerLive() != payload.live()) {
-                    SettingsStore.set(uuid, settings.withStreamerLive(payload.live()));
-                    NameplateManager.apply(server, player);
-                }
+                // `streamerLive` (badge + command routing) is no longer written here.
+                // It's driven exclusively by explicit PlayerSettingsPayload updates —
+                // manual GUI/command toggles, or ClientTwitchIntegration's own graced
+                // auto-on/auto-off decision. This payload is telemetry only.
             });
         });
 
@@ -206,7 +206,8 @@ public final class ConfigPacketServer {
 
                 // Validate (reuse IconGlyphs logic from server, assuming it's accessible)
                 if (!dev.codexbat.streamerutils.IconGlyphs.isValid(iconId)) return;
-                if (dev.codexbat.streamerutils.IconGlyphs.isDeveloperOnly(iconId) && !player.getName().getString().equals("Codex_bat")) return;
+                if (dev.codexbat.streamerutils.IconGlyphs.isDeveloperOnly(iconId) && !player.getName().getString().equals("Codex_bat"))
+                    return;
 
                 PlayerSettings s = SettingsStore.get(uuid);
                 if (s.iconId().equals(iconId)) return;
@@ -352,13 +353,31 @@ public final class ConfigPacketServer {
                             PlayerSettings current = SettingsStore.get(uuid);
 
                             FollowAlertMode mode;
-                            try { mode = FollowAlertMode.valueOf(payload.followAlertMode()); }
-                            catch (IllegalArgumentException e) { mode = FollowAlertMode.BOTH; }
+                            try {
+                                mode = FollowAlertMode.valueOf(payload.followAlertMode());
+                            } catch (IllegalArgumentException e) {
+                                mode = FollowAlertMode.BOTH;
+                            }
 
-                            // Validate icon — reject unknown or developer-only values silently.
-                            String icon = IconGlyphs.isValid(payload.iconId())
-                                    && !IconGlyphs.isDeveloperOnly(payload.iconId())
-                                    ? payload.iconId() : current.iconId();
+                            // Same authority as /su icon set — the server is the only thing
+                            // allowed to answer this, and a rejection is never silent: the
+                            // player is told why, and the client is corrected back to the
+                            // real, persisted icon rather than left believing its request
+                            // went through.
+                            String requestedIcon = payload.iconId();
+                            String icon;
+                            if (!IconGlyphs.isValid(requestedIcon)) {
+                                player.sendMessage(Text.literal("Unknown icon. Use /su icon list.")
+                                        .formatted(Formatting.RED), false);
+                                icon = current.iconId();
+                            } else if (IconGlyphs.isDeveloperOnly(requestedIcon)
+                                    && !player.getName().getString().equals("Codex_bat")) {
+                                player.sendMessage(Text.literal("This icon is reserved for the developer.")
+                                        .formatted(Formatting.RED), false);
+                                icon = current.iconId();
+                            } else {
+                                icon = requestedIcon;
+                            }
 
                             PlayerSettings updated = new PlayerSettings(
                                     icon,
@@ -367,16 +386,25 @@ public final class ConfigPacketServer {
                                     payload.shortPrefix(),
                                     payload.joinMessageEnabled(),
                                     mode,
-                                    current.twitchSetup(),   // server-authoritative, not overwritten
+                                    current.twitchSetup(),
                                     payload.separateChatIconFont()
                             );
                             SettingsStore.set(uuid, updated);
                             NameplateManager.apply(context.server(), player);
+
+                            // Rejected icon → the client's optimistic local write was wrong.
+                            // Push the real state back down so it doesn't keep lying to itself
+                            // next time the menu is opened.
+                            if (!icon.equals(requestedIcon)) {
+                                sendSyncSettings(player);
+                            }
                         })
         );
     }
 
-    /** Helper to send the current PlayerSettings as a SyncSettingsPayload to the player. */
+    /**
+     * Helper to send the current PlayerSettings as a SyncSettingsPayload to the player.
+     */
     private static void sendSyncSettings(ServerPlayerEntity player) {
         PlayerSettings s = SettingsStore.get(player.getUuid());
         ServerPlayNetworking.send(player, new Payloads.SyncSettingsPayload(
@@ -390,7 +418,9 @@ public final class ConfigPacketServer {
         ));
     }
 
-    /** Emojis ^^ */
+    /**
+     * Emojis ^^
+     */
     private static Payloads.SyncEmojiRegistryPayload buildEmojiSyncPayload() {
         List<Payloads.EmojiEntry> entries = EmojiRegistry.all().stream()
                 .map(def -> new Payloads.EmojiEntry(
@@ -432,5 +462,6 @@ public final class ConfigPacketServer {
                 .findFirst().orElse(null);
     }
 
-    private ConfigPacketServer() {}
+    private ConfigPacketServer() {
+    }
 }
